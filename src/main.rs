@@ -12,21 +12,19 @@ fn get_public_ip() -> String {
     resp.get("origin").map(|s| s.to_string()).unwrap()
 }
 
-fn delete_record(body: &Vec<Record>, client: &Client, zone: &String) -> Option<()> {
-    let find_record = &body.iter().find(|r| r.hostname == env::var("DOMAIN").expect("DOMAIN must be an env variable")); //could use ? instead of match
-    //let id = find_record.id.as_ref().unwrap();
+fn delete_record(body: &Vec<Record>, client: &Client, zone: &String) {
+    let find_record = &body.iter().find(|r| r.hostname == env::var("DOMAIN").expect("DOMAIN must be an env variable"));
     let id = match find_record {
         Some(r) => r.id.as_ref().unwrap(), // as_ref converts from &Option<Record> to Option<&Record>
         None => {
             println!("Record not found, nothing to delete");
-            return None
+            return
         }
     };
     let access_token = env::var("ACCESS_TOKEN").expect("ACCESS_TOKEN must be an env variable");
     let delete_api = format!("https://api.netlify.com/api/v1/dns_zones/{}/dns_records/{}?access_token={}", zone, id, access_token);
     let resp = client.delete(delete_api).send().unwrap();
     println!("Delete resp status:{}", resp.status()); 
-    Some(())
 }
 
 fn post_record(val: &str, client: &Client, zone: &String) {
