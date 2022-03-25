@@ -4,4 +4,4 @@
 docker build -t dns .
 
 ##### Run with: 
-docker run -d -v <absolute-path-to>/.env:/.env dns
+docker run -d -v *absolute-path-to*/.env:/.env dns
