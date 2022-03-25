@@ -7,6 +7,6 @@ docker build -t dns .
 docker run -d -v *absolute-path-to*/.env:/.env dns
 
 ##### .env: 
-ACCESS_TOKEN=abcdef
-DOMAIN='domain.example.xyz'
-ZONE='zone_xyz'
+ACCESS_TOKEN=abcdef  
+DOMAIN='domain.example.xyz'  
+ZONE='zone_xyz'  
