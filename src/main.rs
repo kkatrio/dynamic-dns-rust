@@ -1,7 +1,10 @@
+use chrono::Local;
 use std::collections::HashMap;
 use reqwest::StatusCode;
 use serde::{Serialize, Deserialize};
 use reqwest::blocking::Client;
+use std::sync::mpsc;
+use std::{thread, time};
 use dotenv::dotenv;
 use std::env;
 
@@ -56,8 +59,7 @@ struct Record {
     value: String,
 }
 
-fn main() {
-
+fn check_dns() {
     let public_ip = get_public_ip();
     dotenv().ok();
     let zone = env::var("ZONE").expect("ZONE must be an env variable");
@@ -69,13 +71,26 @@ fn main() {
         None => "Not found"
     };
     println!("dns ip: {:?}", ip);
-
     if ip != public_ip {
         println!("ip changed!"); 
-
         delete_record(&body, &client, &zone);
         post_record(&public_ip, &client, &zone);
         get_records(&client, &zone);
+    }
+}
 
+fn main() {
+    // total overkill
+    let (tx, rx) = mpsc::channel();
+    thread::spawn( move || {
+        loop {
+            tx.send(()).unwrap();
+            thread::sleep(time::Duration::from_secs(300));
+        }
+    });
+    loop {
+        rx.recv().unwrap();
+        println!("Checking dns. Time: {}", Local::now());
+        check_dns();
     }
 }
