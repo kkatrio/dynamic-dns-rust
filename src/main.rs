@@ -3,18 +3,19 @@ use dotenv::dotenv;
 use reqwest::blocking::Client;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::env;
 use std::sync::mpsc;
 use std::{thread, time};
 
+#[derive(Deserialize)]
+struct Ip {
+    origin: String,
+}
+
 fn get_public_ip() -> Result<String, reqwest::Error> {
-    let resp = reqwest::blocking::get("https://httpbin.org/ip")?
-        .json::<HashMap<String, String>>()
-        .unwrap();
-    println!("{:#?}", resp);
-    let ip = resp.get("origin").map(|s| s.to_string()).unwrap();
-    Ok(ip)
+    // todo: no blocking
+    let json: Ip = reqwest::blocking::get("https://httpbin.org/ip")?.json()?;
+    Ok(json.origin)
 }
 
 fn delete_record(body: &Vec<Record>, client: &Client, zone: &String) {
@@ -65,7 +66,8 @@ fn get_records(client: &Client, zone: &String) -> Vec<Record> {
     let resp = client.get(&dns_api).send().unwrap();
     if resp.status() == StatusCode::OK {
         let body = resp.json::<Vec<Record>>().unwrap();
-        println!("Body {:?}", body);
+        // todo: use log
+        //println!("Body {:?}", body);
         body
     } else {
         panic!("call: {} \nStatus code: {}", &dns_api, resp.status());
@@ -82,15 +84,17 @@ struct Record {
     value: String,
 }
 
-fn check_dns() {
+fn check_dns(cached_ip: &mut String) {
     let public_ip = match get_public_ip() {
-        Ok(ip) => ip,
-        Err(error) => {
-            println!("Error: {}. Did not get the public ip, returning.", error);
-            return;
+        Ok(ip) => {
+            *cached_ip = ip;
+            cached_ip
+        }
+        Err(e) => {
+            println!("Error in public ip request: {}", e);
+            cached_ip
         }
     };
-    dotenv().ok();
     let zone = env::var("ZONE").expect("ZONE must be an env variable");
     let client = Client::new();
     let body = get_records(&client, &zone);
@@ -103,16 +107,20 @@ fn check_dns() {
         None => "Not found",
     };
     println!("dns ip: {:?}", ip);
-    if ip != public_ip {
+    // string could be empty on a failed get_public_ip attempt after a restart
+    if ip != public_ip && !public_ip.is_empty() {
         println!("ip changed!");
         delete_record(&body, &client, &zone);
         post_record(&public_ip, &client, &zone);
         get_records(&client, &zone);
+    } else {
+        println!("ip not changed.");
     }
 }
 
 fn main() {
-    // total overkill, but I love it.
+    dotenv().ok();
+
     let (tx, rx) = mpsc::channel();
     thread::spawn(move || loop {
         tx.send(()).unwrap();
@@ -120,7 +128,8 @@ fn main() {
     });
     loop {
         rx.recv().unwrap();
-        println!("Checking dns. Time: {}", Local::now());
-        check_dns();
+        println!("{}", Local::now());
+        let mut cached_ip = String::new();
+        check_dns(&mut cached_ip);
     }
 }
